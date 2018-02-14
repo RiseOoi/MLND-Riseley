@@ -12348,6 +12348,7 @@ Percentage of individuals making more than $50,000: 24.78%
 
 <span class="c1"># TODO: Encode the &#39;income_raw&#39; data to numerical values</span>
 <span class="n">income</span> <span class="o">=</span> <span class="p">(</span><span class="n">income_raw</span> <span class="o">==</span> <span class="s1">&#39;&gt;50K&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">int</span><span class="p">)</span> <span class="c1"># if matches condition, return as int 1.</span>
+<span class="c1"># income = income_raw.apply(lambda x: 1 if x==&#39;&gt;50K&#39; else 0) # alternate solution</span>
 <span class="c1"># print(income) # for error checking only</span>
 
 <span class="c1"># Print the number of features after one-hot encoding</span>
@@ -12892,7 +12893,7 @@ Based on the evaluation performed earlier, I believe that the AdaBoostClassifier
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
 <p><strong>Answer: </strong> 
-The final model we will be using, called AdaBoost, is actually a model bases on another model called Decision Trees that decides whether our potential donor has an income level of over 50K if certain conditions are met. The major quality of our AdaBoost model instead of the Decision Trees model is that our model trains many Decision Trees randomly at once. The advantages of this is that AdaBoost is less prone to memorize the answers. This is important because we do not want the model to memorize some answers of a few questions and hoping that the exam tomorrow will come out with the exact same questions.</p>
+The final model we will be using, called AdaBoost, is actually a model bases on another model called Decision Trees that decides whether our potential donor has an income level of over 50K if certain conditions are met. The major quality of our AdaBoost model instead of the Decision Trees model is that our model trains many one-level Decision Trees (decision stumps) in sequence. The advantages of this is that AdaBoost is less prone to memorize the answers. This is important because we do not want the model to memorize some answers of a few questions and hoping that the exam tomorrow will come out with the exact same questions.</p>
 <p>Instead, we have the model to train many weaker learners that perform well in some certain areas and then combine them all together to form a final strong model. Finally, our final model predicts by asking the weaker learners to vote on the answer to the question given while giving more weights to weaker learner(s) that is/are good in that area. Other major qualities of AdaBoost are quick and easy implementation that saves programmers' precious time and also fast training and prediction time that reduces electricity costs.</p>
 
 </div>
