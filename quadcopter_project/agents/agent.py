@@ -1,269 +1,102 @@
-<!DOCTYPE HTML>
-<html>
+from agents.actor import Actor
+from agents.critic import Critic
+from agents.replaybuffer import ReplayBuffer
+from agents.noise import OUNoise
 
-<head>
-    <meta charset="utf-8">
+import numpy as np
 
-    <title>agent.py (editing)</title>
-    <link id="favicon" rel="shortcut icon" type="image/x-icon" href="/static/base/images/favicon-file.ico?v=e2776a7f45692c839d6eea7d7ff6f3b2">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <link rel="stylesheet" href="/static/components/jquery-ui/themes/smoothness/jquery-ui.min.css?v=9b2c8d3489227115310662a343fce11c" type="text/css" />
-    <link rel="stylesheet" href="/static/components/jquery-typeahead/dist/jquery.typeahead.min.css?v=7afb461de36accb1aa133a1710f5bc56" type="text/css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    
-<link rel="stylesheet" href="/static/components/codemirror/lib/codemirror.css?v=ae81317fa2b3a745892c83985827d41b">
-<link rel="stylesheet" href="/static/components/codemirror/addon/dialog/dialog.css?v=c89dce10b44d2882a024e7befc2b63f5">
+class DDPG():
+    """Reinforcement Learning agent that learns using DDPG."""
+    def __init__(self, task):
+        self.task = task
+        self.state_size = task.state_size
+        self.action_size = task.action_size
+        self.action_low = task.action_low
+        self.action_high = task.action_high
 
-    <link rel="stylesheet" href="/static/style/style.min.css?v=47782e517c98a53adb514cbefb4528f2" type="text/css"/>
-    
+        # Actor (Policy) Model
+        self.actor_local = Actor(self.state_size, self.action_size, self.action_low, self.action_high)
+        self.actor_target = Actor(self.state_size, self.action_size, self.action_low, self.action_high)
 
-    <link rel="stylesheet" href="/custom/custom.css" type="text/css" />
-    <script src="/static/components/es6-promise/promise.min.js?v=f004a16cb856e0ff11781d01ec5ca8fe" type="text/javascript" charset="utf-8"></script>
-    <script src="/static/components/preact/index.js?v=00a2fac73c670ce39ac53d26640eb542" type="text/javascript"></script>
-    <script src="/static/components/proptypes/index.js?v=c40890eb04df9811fcc4d47e53a29604" type="text/javascript"></script>
-    <script src="/static/components/preact-compat/index.js?v=f865e990e65ad27e3a2601d8adb48db1" type="text/javascript"></script>
-    <script src="/static/components/requirejs/require.js?v=6da8be361b9ee26c5e721e76c6d4afce" type="text/javascript" charset="utf-8"></script>
-    <script>
-      require.config({
-          
-          urlArgs: "v=20180717103119",
-          
-          baseUrl: '/static/',
-          paths: {
-            'auth/js/main': 'auth/js/main.min',
-            custom : '/custom',
-            nbextensions : '/nbextensions',
-            kernelspecs : '/kernelspecs',
-            underscore : 'components/underscore/underscore-min',
-            backbone : 'components/backbone/backbone-min',
-            jed: 'components/jed/jed',
-            jquery: 'components/jquery/jquery.min',
-            json: 'components/requirejs-plugins/src/json',
-            text: 'components/requirejs-text/text',
-            bootstrap: 'components/bootstrap/js/bootstrap.min',
-            bootstraptour: 'components/bootstrap-tour/build/js/bootstrap-tour.min',
-            'jquery-ui': 'components/jquery-ui/ui/minified/jquery-ui.min',
-            moment: 'components/moment/min/moment-with-locales',
-            codemirror: 'components/codemirror',
-            termjs: 'components/xterm.js/dist/xterm',
-            typeahead: 'components/jquery-typeahead/dist/jquery.typeahead.min',
-          },
-          map: { // for backward compatibility
-              "*": {
-                  "jqueryui": "jquery-ui",
-              }
-          },
-          shim: {
-            typeahead: {
-              deps: ["jquery"],
-              exports: "typeahead"
-            },
-            underscore: {
-              exports: '_'
-            },
-            backbone: {
-              deps: ["underscore", "jquery"],
-              exports: "Backbone"
-            },
-            bootstrap: {
-              deps: ["jquery"],
-              exports: "bootstrap"
-            },
-            bootstraptour: {
-              deps: ["bootstrap"],
-              exports: "Tour"
-            },
-            "jquery-ui": {
-              deps: ["jquery"],
-              exports: "$"
-            }
-          },
-          waitSeconds: 30,
-      });
+        # Critic (Value) Model
+        self.critic_local = Critic(self.state_size, self.action_size)
+        self.critic_target = Critic(self.state_size, self.action_size)
 
-      require.config({
-          map: {
-              '*':{
-                'contents': 'services/contents',
-              }
-          }
-      });
+        # Initialize target model parameters with local model parameters
+        self.critic_target.model.set_weights(self.critic_local.model.get_weights())
+        self.actor_target.model.set_weights(self.actor_local.model.get_weights())
 
-      // error-catching custom.js shim.
-      define("custom", function (require, exports, module) {
-          try {
-              var custom = require('custom/custom');
-              console.debug('loaded custom.js');
-              return custom;
-          } catch (e) {
-              console.error("error loading custom.js", e);
-              return {};
-          }
-      })
+        # Noise process
+        self.exploration_mu = 0
+        self.exploration_theta = 0.15
+        self.exploration_sigma = 0.2
+        self.noise = OUNoise(self.action_size, self.exploration_mu, self.exploration_theta, self.exploration_sigma)
 
-    document.nbjs_translations = {"domain": "nbjs", "locale_data": {"nbjs": {"": {"domain": "nbjs"}}}};
-    </script>
+        # Replay memory
+        self.buffer_size = 100000
+        self.batch_size = 64
+        self.memory = ReplayBuffer(self.buffer_size, self.batch_size)
 
-    
-    
+        # Algorithm parameters
+        self.gamma = 0.99  # discount factor
+        self.tau = 0.01  # for soft update of target parameters
 
-</head>
+    def reset_episode(self):
+        self.noise.reset()
+        state = self.task.reset()
+        self.last_state = state
+        return state
 
-<body class="edit_app "
- 
-data-base-url="/"
-data-file-path="agents/agent.py"
+    def step(self, action, reward, next_state, done):
+         # Save experience / reward
+        self.memory.add(self.last_state, action, reward, next_state, done)
 
-  
- 
+        # Learn, if enough samples are available in memory
+        if len(self.memory) > self.batch_size:
+            experiences = self.memory.sample()
+            self.learn(experiences)
 
-dir="ltr">
+        # Roll over last state and action
+        self.last_state = next_state
 
-<noscript>
-    <div id='noscript'>
-      Jupyter Notebook requires JavaScript.<br>
-      Please enable it to proceed. 
-  </div>
-</noscript>
+    def act(self, state):
+        """Returns actions for given state(s) as per current policy."""
+        state = np.reshape(state, [-1, self.state_size])
+        action = self.actor_local.model.predict(state)[0]
+        return list(action + self.noise.sample())  # add some noise for exploration
 
-<div id="header">
-  <div id="header-container" class="container">
-  <div id="ipython_notebook" class="nav navbar-brand"><a href="/tree" title='dashboard'>
-      <img src='/static/base/images/logo.png?v=641991992878ee24c6f3826e81054a0f' alt='Jupyter Notebook'/>
-  </a></div>
+    def learn(self, experiences):
+        """Update policy and value parameters using given batch of experience tuples."""
+        # Convert experience tuples to separate arrays for each element (states, actions, rewards, etc.)
+        states = np.vstack([e.state for e in experiences if e is not None])
+        actions = np.array([e.action for e in experiences if e is not None]).astype(np.float32).reshape(-1, self.action_size)
+        rewards = np.array([e.reward for e in experiences if e is not None]).astype(np.float32).reshape(-1, 1)
+        dones = np.array([e.done for e in experiences if e is not None]).astype(np.uint8).reshape(-1, 1)
+        next_states = np.vstack([e.next_state for e in experiences if e is not None])
 
-  
+        # Get predicted next-state actions and Q values from target models
+        #     Q_targets_next = critic_target(next_state, actor_target(next_state))
+        actions_next = self.actor_target.model.predict_on_batch(next_states)
+        Q_targets_next = self.critic_target.model.predict_on_batch([next_states, actions_next])
 
-<span id="save_widget" class="pull-left save_widget">
-    <span class="filename"></span>
-    <span class="last_modified"></span>
-</span>
+        # Compute Q targets for current states and train critic model (local)
+        Q_targets = rewards + self.gamma * Q_targets_next * (1 - dones)
+        self.critic_local.model.train_on_batch(x=[states, actions], y=Q_targets)
 
+        # Train actor model (local)
+        action_gradients = np.reshape(self.critic_local.get_action_gradients([states, actions, 0]), (-1, self.action_size))
+        self.actor_local.train_fn([states, action_gradients, 1])  # custom training function
 
-  
-  
-  
-  
+        # Soft-update target models
+        self.soft_update(self.critic_local.model, self.critic_target.model)
+        self.soft_update(self.actor_local.model, self.actor_target.model)
 
-    <span id="login_widget">
-      
-    </span>
+    def soft_update(self, local_model, target_model):
+        """Soft update model parameters."""
+        local_weights = np.array(local_model.get_weights())
+        target_weights = np.array(target_model.get_weights())
 
-  
+        assert len(local_weights) == len(target_weights), "Local and target model parameters must have the same size"
 
-  
-  
-  </div>
-  <div class="header-bar"></div>
-
-  
-
-<div id="menubar-container" class="container">
-  <div id="menubar">
-    <div id="menus" class="navbar navbar-default" role="navigation">
-      <div class="container-fluid">
-          <p  class="navbar-text indicator_area">
-          <span id="current-mode" >current mode</span>
-          </p>
-        <button type="button" class="btn btn-default navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
-          <i class="fa fa-bars"></i>
-          <span class="navbar-text">Menu</span>
-        </button>
-        <ul class="nav navbar-nav navbar-right">
-          <li id="notification_area"></li>
-        </ul>
-        <div class="navbar-collapse collapse">
-          <ul class="nav navbar-nav">
-            <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown">File</a>
-              <ul id="file-menu" class="dropdown-menu">
-                <li id="new-file"><a href="#">New</a></li>
-                <li id="save-file"><a href="#">Save</a></li>
-                <li id="rename-file"><a href="#">Rename</a></li>
-                <li id="download-file"><a href="#">Download</a></li>
-              </ul>
-            </li>
-            <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown">Edit</a>
-              <ul id="edit-menu" class="dropdown-menu">
-                <li id="menu-find"><a href="#">Find</a></li>
-                <li id="menu-replace"><a href="#">Find &amp; Replace</a></li>
-                <li class="divider"></li>
-                <li class="dropdown-header">Key Map</li>
-                <li id="menu-keymap-default"><a href="#">Default<i class="fa"></i></a></li>
-                <li id="menu-keymap-sublime"><a href="#">Sublime Text<i class="fa"></i></a></li>
-                <li id="menu-keymap-vim"><a href="#">Vim<i class="fa"></i></a></li>
-                <li id="menu-keymap-emacs"><a href="#">emacs<i class="fa"></i></a></li>
-              </ul>
-            </li>
-            <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown">View</a>
-              <ul id="view-menu" class="dropdown-menu">
-              <li id="toggle_header" title="Show/Hide the logo and notebook title (above menu bar)">
-              <a href="#">Toggle Header</a></li>
-              <li id="menu-line-numbers"><a href="#">Toggle Line Numbers</a></li>
-              </ul>
-            </li>
-            <li class="dropdown"><a href="#" class="dropdown-toggle" data-toggle="dropdown">Language</a>
-              <ul id="mode-menu" class="dropdown-menu">
-              </ul>
-            </li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="lower-header-bar"></div>
-
-
-</div>
-
-<div id="site">
-
-
-<div id="texteditor-backdrop">
-<div id="texteditor-container" class="container"></div>
-</div>
-
-
-</div>
-
-
-
-
-
-
-    
-
-
-<script src="/static/edit/js/main.min.js?v=69ef7b7a55de6f60611ff3ae94ef5069" type="text/javascript" charset="utf-8"></script>
-
-
-<script type='text/javascript'>
-  function _remove_token_from_url() {
-    if (window.location.search.length <= 1) {
-      return;
-    }
-    var search_parameters = window.location.search.slice(1).split('&');
-    for (var i = 0; i < search_parameters.length; i++) {
-      if (search_parameters[i].split('=')[0] === 'token') {
-        // remote token from search parameters
-        search_parameters.splice(i, 1);
-        var new_search = '';
-        if (search_parameters.length) {
-          new_search = '?' + search_parameters.join('&');
-        }
-        var new_url = window.location.origin + 
-                      window.location.pathname + 
-                      new_search + 
-                      window.location.hash;
-        window.history.replaceState({}, "", new_url);
-        return;
-      }
-    }
-  }
-  _remove_token_from_url();
-</script>
-</body>
-
-</html>
+        new_weights = self.tau * local_weights + (1 - self.tau) * target_weights
+        target_model.set_weights(new_weights)
